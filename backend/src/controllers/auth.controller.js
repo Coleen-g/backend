@@ -1,6 +1,8 @@
+const crypto      = require('crypto');
 const User        = require('../models/user.model');
 const jwt         = require('jsonwebtoken');
 const logActivity = require('../utils/logActivity');
+const sendEmail   = require('../utils/sendEmail');
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN });
@@ -16,7 +18,6 @@ exports.register = async (req, res) => {
 
     const user = await User.create({ name, email, password });
 
-    // Mark online immediately after registration
     user.isOnline = true;
     user.lastSeen = new Date();
     await user.save();
@@ -56,7 +57,6 @@ exports.login = async (req, res) => {
 
     if (!isMatch) return res.status(401).json({ message: 'Wrong password' });
 
-    // Mark online
     user.isOnline = true;
     user.lastSeen = new Date();
     await user.save();
@@ -103,7 +103,7 @@ exports.logout = async (req, res) => {
   }
 };
 
-// Forgot Password
+// Forgot Password — sends OTP via email
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -112,45 +112,70 @@ exports.forgotPassword = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: 'No account found with that email.' });
 
-    const tempPassword = Math.random().toString(36).slice(-8);
-    user.password = tempPassword;
+    // Generate 6-digit OTP
+    const resetOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    user.resetPasswordOTP = resetOtp;
+    user.resetPasswordOtpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
     await user.save();
+
+    await sendEmail({
+      to: email,
+      subject: 'iRabiesCare - Password Reset OTP',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto;">
+          <h2 style="color: #1565C0;">Password Reset Request</h2>
+          <p>Hi ${user.name},</p>
+          <p>Use the OTP below to reset your password. It expires in <strong>15 minutes</strong>.</p>
+          <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 16px; text-align: center; margin: 20px 0;">
+            <p style="margin: 0; font-size: 12px; color: #166534; font-weight: bold;">YOUR OTP CODE</p>
+            <p style="font-size: 36px; font-weight: bold; color: #15803d; letter-spacing: 8px; margin: 8px 0;">${resetOtp}</p>
+          </div>
+          <p style="color: #94a3b8; font-size: 12px;">If you didn't request this, please ignore this email.</p>
+        </div>
+      `,
+    });
 
     await logActivity({
       action: 'PASSWORD_RESET', module: 'Auth',
-      description: `Password reset requested for ${user.name} (${email})`,
+      description: `Password reset OTP sent to ${user.name} (${email})`,
       user: { id: user._id, name: user.name, role: user.role },
       targetId: user._id, targetName: user.name, req,
     });
 
-    console.log(`Temp password for ${email}: ${tempPassword}`);
-    res.status(200).json({ message: 'Temporary password generated successfully.', tempPassword });
+    res.status(200).json({ message: 'OTP sent to your email.' });
   } catch (error) {
     console.error('Forgot password error:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// Reset Password
+// Reset Password — verifies OTP then sets new password
 exports.resetPassword = async (req, res) => {
   try {
-    const { email, tempPassword, newPassword } = req.body;
+    const { email, otp, newPassword } = req.body;
 
-    if (!email || !tempPassword || !newPassword) {
-      return res.status(400).json({ message: 'Email, temporary password and new password are required.' });
-    }
+    if (!email || !otp || !newPassword)
+      return res.status(400).json({ message: 'Email, OTP and new password are required.' });
+
+    if (newPassword.length < 6)
+      return res.status(400).json({ message: 'New password must be at least 6 characters.' });
 
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: 'No account found with that email.' });
 
-    const isTempMatch = await user.comparePassword(tempPassword);
-    if (!isTempMatch) return res.status(401).json({ message: 'Temporary password is incorrect.' });
+    // Check OTP match
+    if (user.resetPasswordOTP !== otp)
+      return res.status(401).json({ message: 'Invalid OTP.' });
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: 'New password must be at least 6 characters.' });
-    }
+    // Check OTP expiry
+    if (!user.resetPasswordOtpExpires || user.resetPasswordOtpExpires < new Date())
+      return res.status(401).json({ message: 'OTP has expired. Please request a new one.' });
 
+    // Set new password and clear OTP fields
     user.password = newPassword;
+    user.resetPasswordOTP = null;
+    user.resetPasswordOtpExpires = null;
     await user.save();
 
     await logActivity({
@@ -160,7 +185,7 @@ exports.resetPassword = async (req, res) => {
       targetId: user._id, targetName: user.name, req,
     });
 
-    res.status(200).json({ message: 'Password has been reset successfully.' });
+    res.status(200).json({ message: 'Password reset successfully.' });
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ message: error.message });
