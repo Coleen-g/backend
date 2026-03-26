@@ -5,8 +5,8 @@ const sendEmail = async ({ to, subject, html }) => {
     throw new Error('BREVO_API_KEY not configured');
   }
 
-  const senderEmail = process.env.FROM_EMAIL || 'no-reply@irabiescare.com';
-  const senderName  = process.env.FROM_NAME  || 'iRabiesCare';
+  const senderEmail = process.env.EMAIL_SENDER      || 'no-reply@irabiescare.brevo.com';
+  const senderName  = process.env.EMAIL_SENDER_NAME || 'iRabiesCare';
 
   const payload = JSON.stringify({
     sender:      { email: senderEmail, name: senderName },
