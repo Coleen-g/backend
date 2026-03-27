@@ -75,14 +75,20 @@ exports.getCaseById = async (req, res) => {
 // Create case — supports optional walk-in mobile account creation + Cloudinary upload
 exports.createCase = async (req, res) => {
   try {
+    // ✅ ADD THESE DEBUG LOGS
+    console.log('=== createCase START ===');
+    console.log('Body:', JSON.stringify(req.body));
+    console.log('File:', req.file);
+    console.log('User:', req.user?.id, req.user?.role);
+
     const { createAccount, accountEmail, accountPassword, ...caseFields } = req.body;
 
     const documentUrl = req.file?.path || req.file?.secure_url || null;
 
     const sanitized = {
       ...caseFields,
-      age:              Number(caseFields.age) || 0,         // ✅ cast string "23" → number 23
-      numberOfWounds:   Number(caseFields.numberOfWounds) || null,  // ✅ cast string "1" → number 1
+      age:              Number(caseFields.age) || 0,
+      numberOfWounds:   Number(caseFields.numberOfWounds) || null,
       email:            caseFields.email            || null,
       bodyPartAffected: caseFields.bodyPartAffected || null,
       animalVaccinated: caseFields.animalVaccinated || null,
@@ -92,15 +98,18 @@ exports.createCase = async (req, res) => {
       documentUrl,
     };
 
+    // ✅ ADD THIS
+    console.log('Sanitized:', JSON.stringify(sanitized));
+
     const newCase = await Case.create({
       ...sanitized,
       createdBy:     req.user.id,
       assignedTo:    sanitized.assignedTo || (req.user.role === 'staff' ? req.user.id : null),
-      // ✅ FIX: automatically link case to the logged-in mobile user
       patientUserId: req.user.role === 'user' ? req.user.id : null,
     });
 
-   
+    // ✅ ADD THIS
+    console.log('=== createCase SUCCESS ===', newCase.caseId);
 
     await logActivity({
       action: 'CREATE', module: 'Case',
@@ -143,7 +152,14 @@ exports.createCase = async (req, res) => {
 
     res.status(201).json({ message: 'Case registered successfully', case: newCase, accountCreated: false });
   } catch (error) {
-    console.error('createCase error:', error);
+    // ✅ ADD THESE — logs full error details
+    console.error('=== createCase ERROR ===');
+    console.error('Message:', error.message);
+    console.error('Name:', error.name);
+    console.error('Stack:', error.stack);
+    if (error.errors) {
+      console.error('Validation errors:', JSON.stringify(error.errors));
+    }
     res.status(500).json({ message: error.message || 'Server error' });
   }
 };
