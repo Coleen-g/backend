@@ -143,8 +143,8 @@ exports.createCase = async (req, res) => {
 
     res.status(201).json({ message: 'Case registered successfully', case: newCase, accountCreated: false });
   } catch (error) {
-    console.error('createCase error:', error.message);
-    res.status(500).json({ message: error.message });
+    console.error('createCase error:', error);
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
