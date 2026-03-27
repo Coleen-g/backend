@@ -50,11 +50,17 @@ const caseSchema = new mongoose.Schema({
 });
 
 // Auto-generate caseId before saving
+// ✅ REPLACE the pre-save hook
 caseSchema.pre('save', async function () {
   if (!this.isNew) return;
-  const last = await mongoose.model('Case').findOne({}, {}, { sort: { createdAt: -1 } });
-  const lastNum = last?.caseId ? parseInt(last.caseId) : 0;
-  this.caseId = String(lastNum + 1).padStart(4, '0');
+  try {
+    const last = await mongoose.model('Case').findOne({}, {}, { sort: { createdAt: -1 } });
+    const lastNum = last?.caseId ? parseInt(last.caseId) : 0;
+    this.caseId = String(lastNum + 1).padStart(4, '0');
+  } catch (e) {
+    console.error('caseId generation error:', e);
+    this.caseId = `CASE-${Date.now()}`;
+  }
 });
 
 module.exports = mongoose.model('Case', caseSchema);
