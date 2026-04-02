@@ -267,16 +267,7 @@ exports.createVaccination = async (req, res) => {
       rigDosage:           rigGiven ? rigDosage           : null,
       manufacturer, vaccineStockUsed, status: autoStatus, createdBy: req.user.id,
     });
-
-    // after: const newVaccination = await Vaccination.create({...});
-
-      const io = req.app.get('io');
-      if (io) io.emit('new_notification', {
-        type: 'vaccination',
-        message: `New vaccination record created for a patient`,
-        createdBy: req.user.name,
-        createdAt: new Date(),
-      });
+    
 
     await logActivity({
       action: 'CREATE', module: 'Vaccination',

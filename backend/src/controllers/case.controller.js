@@ -111,6 +111,7 @@ exports.createCase = async (req, res) => {
       assignedTo:    sanitized.assignedTo || (req.user.role === 'staff' ? req.user.id : null),
       patientUserId: req.user.role === 'user' ? req.user.id : null,
     });
+    
 
     // ✅ ADD THIS
     console.log('=== createCase SUCCESS ===', newCase.caseId);
